@@ -17,25 +17,44 @@ outputFormat :: Bool -> Int
 outputFormat True  =  1
 outputFormat False = -1
 
+
+-- | Domain-specific "boolean"
+data Color = Black | White deriving (Eq)
+
+alternateColor :: Color -> Color
+alternateColor Black = White
+alternateColor White = Black
+
+
 -- | Return True when given undirected graph is bipartite.
 isBipartite :: Graph -> Bool
 isBipartite g =
   case IntMap.minViewWithKey g of
     Nothing        -> True
-    Just ((v,_),_) -> processVertex True v (const isBipartite) IntMap.empty g
+    Just ((v,_),_) -> check' IntMap.empty g
+      where
+      check   = const isBipartite                             :: BipartiteCheck
+      check'  = processVertex White v check                   :: BipartiteCheck
 
+-- | Graph colors -> Graph edges -> Is Bipartite?
+type BipartiteCheck = IntMap Color -> Graph -> Bool
+
+-- | Check a component of the graph starting at the given vertex with the
+-- given color. Continue checking the rest of the graph with the given
+-- continuation after checking this vertex's neighbors.
 processVertex ::
-  Bool                           {- ^ Current parity -} ->
-  Int                            {- ^ Current vertex -} ->
-  (IntMap Bool -> Graph -> Bool) {- ^ Continuation   -} ->
-  IntMap Bool                    {- ^ Graph parities -} ->
-  Graph                          {- ^ Graph edges    -} ->
-  Bool                           {- ^ is bipartite?  -}
-processVertex parity v k parities g =
-  case IntMap.lookup v parities of
-    Just p  -> p == parity && k parities g
-    Nothing -> foldr (processVertex (not parity))      -- flip parity for neighbors
-                     k
-                     (IntMap.findWithDefault [] v g)   -- neighbor list
-                     (IntMap.insert v parity parities) -- mark parity
-                     (IntMap.delete v g)               -- shrink graph
+  Color          {- ^ Current color  -} ->
+  Int            {- ^ Current vertex -} ->
+  BipartiteCheck {- ^ Resume check on rest of graph -} ->
+  BipartiteCheck
+processVertex color v check colors g =
+  case IntMap.lookup v colors of
+    Just c  -> c == color
+            && check  colors  g
+    Nothing -> check' colors' g'
+     where
+     check'    = foldr (processVertex color') check neighbors :: BipartiteCheck
+     color'    = alternateColor color                         :: Color
+     colors'   = IntMap.insert v color colors                 :: IntMap Color
+     g'        = IntMap.delete v g                            :: Graph
+     neighbors = IntMap.findWithDefault [] v g                :: [Int]
