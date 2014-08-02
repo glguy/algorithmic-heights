@@ -6,10 +6,13 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Main where
 
-
 import Data.IntMap (IntMap)
 import Data.Monoid (Endo(Endo), (<>), mempty)
+import Data.Profunctor
+import Data.Profunctor.Rep
 import Control.Lens
+import Control.Category
+import Prelude hiding ((.), id)
 
 import Common (Graph, readDGraph, printList)
 import Neg
@@ -52,12 +55,14 @@ type C = Neg [[Int]] TarjanState TarjanState
 
 
 tarjan :: Graph -> [[Vertex]]
-tarjan g = runNeg (g^.ifolded.asIndex.to vertexStep)
-                  (\_st -> [])
-                  TarjanState { _nextIndex = 0, _stack = [], _annotations = mempty }
+tarjan g = exec $ arr (const initialState)
+              >>> g^.ifolded.asIndex.to vertexStep
+              >>> abort []
   where
+  initialState = TarjanState { _nextIndex = 0, _stack = [], _annotations = mempty }
+
   vertexStep :: Vertex -> C
-  vertexStep v = branch $ \st ->
+  vertexStep v = peek $ \st ->
     whenE (hasn't (annotations.ix v) st)
       (strongConnect v)
 
@@ -77,7 +82,7 @@ tarjan g = runNeg (g^.ifolded.asIndex.to vertexStep)
 
     -- consider a neighbor of v, recurse when unvisited, compare otherwise
     edgeStep :: Vertex -> C
-    edgeStep w = branch $ \st ->
+    edgeStep w = peek $ \st ->
       case st ^? annotations.ix w.vIndex of
         Nothing -> strongConnect w
                 <> arr (annotations %~ vwMinLink w)
@@ -87,7 +92,7 @@ tarjan g = runNeg (g^.ifolded.asIndex.to vertexStep)
 
     -- emit a single SCC when v.lowlink=v.index
     finish :: C
-    finish = branch $ \st ->
+    finish = peek $ \st ->
       case st ^?! annotations.ix v of
         VA vix vlow ->
           whenE (vix == vlow) $
@@ -107,8 +112,15 @@ tarjan g = runNeg (g^.ifolded.asIndex.to vertexStep)
 -- ENDO computation combinators
 ------------------------------------------------------------------------
 
+whenE :: Category c => Bool -> c a a -> c a a
 whenE True  e = e
-whenE False _ = mempty
+whenE False _ = id
 
+peek :: Representable p => (d -> p d c) -> p d c
+peek f = tabulate (\d -> rep (f d) d)
 
-focus l c = branch (\st -> dimap (^# l)(\b -> storing l b st) c)
+arr :: (Profunctor p, Category p) => (a -> b) -> p a b
+arr f = rmap f id
+
+-- overP :: Strong p => ALens s t a b -> p a b -> p s t
+-- overP l = dimap (\st -> (st ^# l, st)) (\(b,st) -> storing l b st) . first'

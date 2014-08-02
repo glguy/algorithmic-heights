@@ -9,6 +9,8 @@ import Prelude hiding (id, (.))
 
 import Control.Monad.Trans.Cont
 
+import Data.Void
+
 newtype Neg r a b = Neg { runNeg :: (b -> r) -> (a -> r) }
 
 instance Functor (Neg r a) where
@@ -18,14 +20,11 @@ instance Profunctor (Neg r) where
   rmap = fmap
   lmap ab (Neg crbr) = Neg $ \cr a -> crbr cr (ab a)
 
-arr :: (a -> b) -> Neg r a b
-arr ba = Neg (\ar b -> ar (ba b))
-
 mapResult :: (r -> r) -> Neg r a a
 mapResult f = Neg (\ar a -> f (ar a))
 
-branch :: (a -> Neg r a b) -> Neg r a b
-branch f = Neg (\ar a -> runNeg (f a) ar a)
+abort :: r -> Neg r a b
+abort r = Neg (\_ _ -> r)
 
 instance Category (Neg r) where
   id = Neg (\ar a -> ar a)
@@ -45,3 +44,6 @@ instance Choice (Neg r) where
 
 instance Strong (Neg r) where
   first' (Neg brar) = Neg (\bcr (a,c) -> brar (\b -> bcr (b,c)) a)
+
+exec :: Neg r () Void -> r
+exec (Neg f) = f absurd ()
