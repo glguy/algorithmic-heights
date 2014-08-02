@@ -69,7 +69,7 @@ tarjan g = runNeg (g^.ifolded.asIndex.to vertexStep)
     where
     -- first visit to this vertex, initialize its index and add to stack
     start :: C
-    start = neg $ \st ->
+    start = arr $ \st ->
                let i = st ^. nextIndex in
                st & nextIndex        +~ 1
                   & stack            %~ cons v
@@ -78,12 +78,12 @@ tarjan g = runNeg (g^.ifolded.asIndex.to vertexStep)
     -- consider a neighbor of v, recurse when unvisited, compare otherwise
     edgeStep :: Vertex -> C
     edgeStep w = branch $ \st ->
-      case st^?annotations.ix w.vIndex of
+      case st ^? annotations.ix w.vIndex of
         Nothing -> strongConnect w
-                <> neg (annotations %~ vwMinLink w)
+                <> arr (annotations %~ vwMinLink w)
         Just wix ->
           whenE (w `elem` view stack st)
-            (neg (annotations %~ minLink wix))
+            (arr (annotations %~ minLink wix))
 
     -- emit a single SCC when v.lowlink=v.index
     finish :: C
@@ -93,7 +93,7 @@ tarjan g = runNeg (g^.ifolded.asIndex.to vertexStep)
           whenE (vix == vlow) $
             case break (==v) (st^.stack) of
               (xs,_v:s1) -> mapResult (cons (v:xs))
-                         <> neg (stack .~ s1)
+                         <> arr (stack .~ s1)
 
     -- v.lowlink = min v.lowlink w.lowlink
     vwMinLink :: Vertex -> IntMap VertexAnnotation -> IntMap VertexAnnotation
@@ -109,3 +109,6 @@ tarjan g = runNeg (g^.ifolded.asIndex.to vertexStep)
 
 whenE True  e = e
 whenE False _ = mempty
+
+
+focus l c = branch (\st -> dimap (^# l)(\b -> storing l b st) c)
