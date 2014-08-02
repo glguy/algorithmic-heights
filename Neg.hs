@@ -42,3 +42,6 @@ instance Representable (Neg r) where
 
 instance Choice (Neg r) where
   left' (Neg brar) = Neg (\ebcr -> either (brar (ebcr . Left)) (ebcr . Right))
+
+instance Strong (Neg r) where
+  first' (Neg brar) = Neg (\bcr (a,c) -> brar (\b -> bcr (b,c)) a)
