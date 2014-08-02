@@ -63,8 +63,9 @@ tarjan g = exec $ arr (const initialState)
 
   vertexStep :: Vertex -> C
   vertexStep v = peek $ \st ->
-    whenE (hasn't (annotations.ix v) st)
-      (strongConnect v)
+    if hasn't (annotations.ix v) st
+      then strongConnect v
+      else id
 
   strongConnect :: Vertex -> C
   strongConnect v = start
@@ -84,18 +85,19 @@ tarjan g = exec $ arr (const initialState)
     edgeStep :: Vertex -> C
     edgeStep w = peek $ \st ->
       case st ^? annotations.ix w.vIndex of
-        Nothing -> strongConnect w
-                <> arr (annotations %~ vwMinLink w)
-        Just wix ->
-          whenE (w `elem` view stack st)
-            (arr (annotations %~ minLink wix))
+        Nothing                    -> strongConnect w
+                                   <> arr (annotations %~ vwMinLink w)
+        Just wix
+          | w `elem` view stack st -> arr (annotations %~ minLink wix)
+          | otherwise              -> id
 
     -- emit a single SCC when v.lowlink=v.index
     finish :: C
     finish = peek $ \st ->
       case st ^?! annotations.ix v of
-        VA vix vlow ->
-          whenE (vix == vlow) $
+        VA vix vlow
+          | vix /= vlow -> id
+          | otherwise   ->
             case break (==v) (st^.stack) of
               (xs,_v:s1) -> mapResult (cons (v:xs))
                          <> arr (stack .~ s1)
@@ -109,12 +111,8 @@ tarjan g = exec $ arr (const initialState)
     minLink i = ix v . vLowLink %~ min i
 
 ------------------------------------------------------------------------
--- ENDO computation combinators
+-- combinators
 ------------------------------------------------------------------------
-
-whenE :: Category c => Bool -> c a a -> c a a
-whenE True  e = e
-whenE False _ = id
 
 peek :: Representable p => (d -> p d c) -> p d c
 peek f = tabulate (\d -> rep (f d) d)
