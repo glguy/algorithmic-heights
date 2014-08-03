@@ -10,6 +10,7 @@ import Data.IntMap (IntMap)
 import Data.Monoid (Endo(Endo), (<>), mempty)
 import Data.Profunctor
 import Data.Profunctor.Rep
+import Data.Profunctor.Monoid
 import Control.Lens
 import Control.Category
 import Prelude hiding ((.), id)
@@ -55,7 +56,7 @@ type C = Neg [[Int]] TarjanState TarjanState
 
 
 tarjan :: Graph -> [[Vertex]]
-tarjan g = exec $ arr (const initialState)
+tarjan g = exec $ eta (const initialState)
               >>> g^.ifolded.asIndex.to vertexStep
               >>> abort []
   where
@@ -75,7 +76,7 @@ tarjan g = exec $ arr (const initialState)
     where
     -- first visit to this vertex, initialize its index and add to stack
     start :: C
-    start = arr $ \st ->
+    start = eta $ \st ->
                let i = st ^. nextIndex in
                st & nextIndex        +~ 1
                   & stack            %~ cons v
@@ -86,9 +87,9 @@ tarjan g = exec $ arr (const initialState)
     edgeStep w = peek $ \st ->
       case st ^? annotations.ix w.vIndex of
         Nothing                    -> strongConnect w
-                                   <> arr (annotations %~ vwMinLink w)
+                                   <> eta (annotations %~ vwMinLink w)
         Just wix
-          | w `elem` view stack st -> arr (annotations %~ minLink wix)
+          | w `elem` view stack st -> eta (annotations %~ minLink wix)
           | otherwise              -> id
 
     -- emit a single SCC when v.lowlink=v.index
@@ -100,7 +101,7 @@ tarjan g = exec $ arr (const initialState)
           | otherwise   ->
             case break (==v) (st^.stack) of
               (xs,_v:s1) -> mapResult (cons (v:xs))
-                         <> arr (stack .~ s1)
+                         <> eta (stack .~ s1)
 
     -- v.lowlink = min v.lowlink w.lowlink
     vwMinLink :: Vertex -> IntMap VertexAnnotation -> IntMap VertexAnnotation
@@ -116,9 +117,6 @@ tarjan g = exec $ arr (const initialState)
 
 peek :: Representable p => (d -> p d c) -> p d c
 peek f = tabulate (\d -> rep (f d) d)
-
-arr :: (Profunctor p, Category p) => (a -> b) -> p a b
-arr f = rmap f id
 
 -- overP :: Strong p => ALens s t a b -> p a b -> p s t
 -- overP l = dimap (\st -> (st ^# l, st)) (\(b,st) -> storing l b st) . first'

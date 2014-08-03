@@ -5,6 +5,7 @@ import Data.Profunctor
 import Data.Profunctor.Rep
 import Data.Monoid
 import Control.Category
+import Control.Applicative
 import Prelude hiding (id, (.))
 
 import Control.Monad.Trans.Cont
@@ -47,3 +48,11 @@ instance Strong (Neg r) where
 
 exec :: Neg r () Void -> r
 exec (Neg f) = f absurd ()
+
+instance Applicative (Neg r a) where
+  Neg f <*> Neg g = Neg (\h x -> f (\ab_r -> g (\ar -> h (ab_r ar)) x) x)
+  pure a = Neg (\f _c -> f a)
+
+instance Monad (Neg r a) where
+  return = pure
+  Neg f >>= g = Neg (\h a -> f (\b -> runNeg (g b) h a) a)
